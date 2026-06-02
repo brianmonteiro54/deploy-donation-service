@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: volunteer-service
+  namespace: solidarytech-volunteer
+  labels:
+    app.kubernetes.io/name: volunteer-service
+    app.kubernetes.io/component: volunteer
+    app.kubernetes.io/part-of: solidarytech
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: volunteer-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: volunteer-service
+        app.kubernetes.io/name: volunteer-service
+        app.kubernetes.io/component: volunteer
+        app.kubernetes.io/part-of: solidarytech
+    spec:
+      # Sem initContainer / DATABASE_URL: este serviço usa DynamoDB, não Postgres.
+      containers:
+        - name: volunteer-service
+          # Tag atualizada automaticamente pelo CI do repo volunteer-service.
+          image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/solidarytech/volunteer-service:latest
+          imagePullPolicy: IfNotPresent
+          # Sem command/args: usa o CMD do Dockerfile (gunicorn na porta 8083).
+          ports:
+            - name: http
+              containerPort: 8083
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "8083"
+            - name: APP_ENV
+              value: "production"
+            - name: AWS_REGION
+              value: "us-east-1"
+            # Ajuste para a tabela real criada pelo Terraform:
+            # solidarytech-<env>-volunteers (ex.: solidarytech-prod-volunteers).
+            - name: AWS_DYNAMODB_TABLE
+              value: "solidarytech-prod-volunteers"
+            # Credenciais AWS para o boto3 acessar o DynamoDB.
+            # Vêm do secret aws-credentials (criado pelo Terraform neste namespace;
+            # AWS Academy não tem IRSA).
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: secret-access-key
+            - name: AWS_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: session-token
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
