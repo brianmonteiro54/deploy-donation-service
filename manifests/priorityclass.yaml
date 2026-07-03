@@ -1,0 +1,18 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: solidarytech-donation-critical
+  labels:
+    app.kubernetes.io/name: donation-service
+    app.kubernetes.io/component: donation
+    app.kubernetes.io/part-of: solidarytech
+  annotations:
+    # Recurso CLUSTER-SCOPED: precisa existir ANTES do Deployment (wave 2),
+    # senão o pod que referencia esta classe é rejeitado na criação.
+    argocd.argoproj.io/sync-wave: "-1"
+# Valor alto relativo aos outros pods (que estão em 0, o default) e bem abaixo
+# das classes de sistema do Kubernetes. O que importa é ser MAIOR que ngo/volunteer.
+value: 1000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "Prioridade alta para o hot path de doacoes (donation-service). Sob pressao de no, pods de menor prioridade sao preemptados/despejados primeiro."
